@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnergyOS — CPU Scheduler Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #080c14;
+  --bg2: #0d1320;
+  --bg3: #111827;
+  --card: #0f1929;
+  --border: #1e2d45;
+  --border2: #243554;
+  --accent: #00d4ff;
+  --accent2: #0099cc;
+  --green: #00ff88;
+  --red: #ff4757;
+  --orange: #ffa502;
+  --purple: #a855f7;
+  --text: #e8f0fe;
+  --text2: #8ba3c7;
+  --text3: #4a6080;
+  --rt: #ff4757;
+  --cpu: #00d4ff;
+  --io: #00ff88;
+  --bg-color: #a855f7;
+  --idle: #2a3a52;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at 20% 20%,rgba(0,212,255,0.04) 0%,transparent 60%),radial-gradient(ellipse at 80% 80%,rgba(0,255,136,0.03) 0%,transparent 60%);pointer-events:none;z-index:0}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(8,12,20,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:-.02em;color:var(--text)}
+.nav-logo span{color:var(--accent)}
+.nav-links{display:flex;gap:2rem}
+.nav-links a{color:var(--text2);font-size:.85rem;font-weight:500;text-decoration:none;letter-spacing:.05em;transition:color .2s;cursor:pointer}
+.nav-links a:hover,.nav-links a.active{color:var(--accent)}
+.nav-badge{background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);color:var(--accent);font-size:.7rem;padding:4px 10px;border-radius:100px;font-family:'JetBrains Mono',monospace;font-weight:500}
+
+/* HERO */
+.hero{padding:120px 2rem 60px;text-align:center;position:relative;z-index:1}
+.hero-tag{display:inline-block;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);color:var(--accent);font-size:.75rem;padding:6px 16px;border-radius:100px;margin-bottom:1.5rem;font-family:'JetBrains Mono',monospace;letter-spacing:.1em}
+.hero h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;line-height:1.05;letter-spacing:-.04em;margin-bottom:1.2rem}
+.hero h1 .line2{color:var(--accent)}
+.hero p{color:var(--text2);font-size:1.1rem;max-width:600px;margin:0 auto 2.5rem;line-height:1.7;font-weight:400}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s;text-decoration:none;font-family:'Syne',sans-serif;border:none}
+.btn-primary{background:var(--accent);color:#000}
+.btn-primary:hover{background:#00eeff;transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,212,255,0.3)}
+.btn-outline{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+
+/* STATS STRIP */
+.stats-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:0;position:relative;z-index:1}
+.stat-item{background:var(--bg);padding:1.5rem 2rem;text-align:center}
+.stat-num{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700;color:var(--accent);margin-bottom:4px}
+.stat-label{color:var(--text2);font-size:.8rem;letter-spacing:.05em}
+
+/* MAIN LAYOUT */
+.main{max-width:1400px;margin:0 auto;padding:3rem 2rem;position:relative;z-index:1}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem}
+.section-title{font-size:1.2rem;font-weight:700;letter-spacing:-.02em}
+.section-tag{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:3px 10px;border-radius:4px}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.card-header{padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.card-title{font-size:.9rem;font-weight:600;letter-spacing:-.01em}
+.card-body{padding:1.5rem}
+
+/* PROCESS TABLE */
+.proc-table-header{display:grid;grid-template-columns:50px 1fr 100px 110px 110px 110px 36px;gap:8px;padding:8px 16px;font-size:.7rem;letter-spacing:.08em;color:var(--text3);font-family:'JetBrains Mono',monospace;border-bottom:1px solid var(--border)}
+.proc-row{display:grid;grid-template-columns:50px 1fr 100px 110px 110px 110px 36px;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(30,45,69,0.5);align-items:center;transition:background .15s}
+.proc-row:last-child{border-bottom:none}
+.proc-row:hover{background:rgba(255,255,255,0.02)}
+.pid-badge{background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.2);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:.75rem;padding:3px 8px;border-radius:6px;text-align:center;font-weight:700}
+.type-select{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:.8rem;padding:6px 10px;border-radius:8px;width:100%;font-family:'Syne',sans-serif;cursor:pointer;outline:none;transition:border-color .2s}
+.type-select:focus{border-color:var(--accent)}
+.num-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:.8rem;padding:6px 10px;border-radius:8px;width:100%;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s;text-align:center}
+.num-input:focus{border-color:var(--accent)}
+.del-btn{background:none;border:1px solid transparent;color:var(--text3);cursor:pointer;font-size:1rem;border-radius:6px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.del-btn:hover{background:rgba(255,71,87,0.1);border-color:rgba(255,71,87,0.3);color:var(--red)}
+
+/* TYPE BADGES */
+.type-badge{display:inline-flex;align-items:center;gap:5px;font-size:.7rem;padding:3px 8px;border-radius:6px;font-weight:600;font-family:'JetBrains Mono',monospace}
+.badge-rt{background:rgba(255,71,87,0.15);color:var(--rt);border:1px solid rgba(255,71,87,0.25)}
+.badge-cpu{background:rgba(0,212,255,0.12);color:var(--cpu);border:1px solid rgba(0,212,255,0.2)}
+.badge-io{background:rgba(0,255,136,0.1);color:var(--io);border:1px solid rgba(0,255,136,0.2)}
+.badge-bg{background:rgba(168,85,247,0.1);color:var(--purple);border:1px solid rgba(168,85,247,0.2)}
+
+/* METRIC CARDS */
+.metrics-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:2rem}
+.metric-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.2rem;position:relative;overflow:hidden;transition:border-color .3s}
+.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.metric-card.accent::before{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.metric-card.green::before{background:linear-gradient(90deg,var(--green),#00cc66)}
+.metric-card.red::before{background:linear-gradient(90deg,var(--red),#ff6b6b)}
+.metric-card.purple::before{background:linear-gradient(90deg,var(--purple),#7c3aed)}
+.metric-card.orange::before{background:linear-gradient(90deg,var(--orange),#ff6348)}
+.metric-label{font-size:.7rem;color:var(--text3);letter-spacing:.06em;margin-bottom:.5rem;font-family:'JetBrains Mono',monospace}
+.metric-value{font-size:1.8rem;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.03em;line-height:1}
+.metric-unit{font-size:.75rem;color:var(--text2);margin-top:4px}
+
+/* CHARTS */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:2rem}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.chart-header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.chart-title{font-size:.85rem;font-weight:600;color:var(--text2)}
+.chart-body{padding:1.2rem}
+
+/* GANTT */
+.gantt-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:2rem}
+.gantt-inner{padding:1.5rem;overflow-x:auto}
+.gantt-track{position:relative;height:52px;min-width:100%;background:rgba(255,255,255,0.02);border-radius:8px;overflow:visible}
+.gantt-block{position:absolute;height:40px;top:6px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;font-family:'JetBrains Mono',monospace;transition:opacity .15s;cursor:pointer;overflow:hidden;border:1px solid rgba(255,255,255,0.1)}
+.gantt-block:hover{opacity:.85;z-index:10;transform:scaleY(1.05)}
+.gantt-axis{display:flex;justify-content:space-between;font-size:.65rem;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-top:8px;padding:0 2px}
+.gantt-legend{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:1rem}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--text2)}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* RESULTS TABLE */
+.results-table{width:100%}
+.rt-header{display:grid;grid-template-columns:60px 1fr 110px 110px 100px 110px 100px;gap:8px;padding:10px 16px;font-size:.65rem;letter-spacing:.08em;color:var(--text3);font-family:'JetBrains Mono',monospace;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.2)}
+.rt-row{display:grid;grid-template-columns:60px 1fr 110px 110px 100px 110px 100px;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(30,45,69,0.4);align-items:center;font-size:.8rem;transition:background .15s;animation:slideIn .3s ease both}
+.rt-row:hover{background:rgba(0,212,255,0.03)}
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.deadline-met{color:var(--green);font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700}
+.deadline-miss{color:var(--red);font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700}
+.mono{font-family:'JetBrains Mono',monospace}
+
+/* ALGO SELECTOR */
+.algo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.algo-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:1rem;cursor:pointer;transition:all .2s;position:relative}
+.algo-card.selected{border-color:var(--accent);background:rgba(0,212,255,0.05)}
+.algo-card.selected::after{content:'✓';position:absolute;top:10px;right:12px;color:var(--accent);font-size:.8rem;font-weight:700}
+.algo-name{font-size:.85rem;font-weight:700;margin-bottom:4px}
+.algo-desc{font-size:.72rem;color:var(--text2);line-height:1.5}
+.algo-badge{display:inline-block;font-size:.6rem;padding:2px 7px;border-radius:100px;margin-bottom:6px;font-family:'JetBrains Mono',monospace;font-weight:700}
+.algo-badge.energy{background:rgba(0,255,136,0.1);color:var(--green)}
+.algo-badge.trad{background:rgba(255,165,2,0.1);color:var(--orange)}
+
+/* RUN BTN */
+.run-btn{background:linear-gradient(135deg,var(--accent),#0099ff);color:#000;border:none;padding:14px 32px;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer;width:100%;margin-top:1rem;font-family:'Syne',sans-serif;letter-spacing:-.01em;transition:all .25s;position:relative;overflow:hidden}
+.run-btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,212,255,0.35)}
+.run-btn:active{transform:translateY(0)}
+.run-btn.running{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
+
+/* PRESET CHIPS */
+.preset-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem}
+.chip{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);padding:6px 14px;border-radius:100px;font-size:.75rem;cursor:pointer;transition:all .2s;font-weight:500}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+
+/* SECTION TABS */
+.page-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:2.5rem}
+.page-tab{padding:12px 24px;font-size:.85rem;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;letter-spacing:-.01em}
+.page-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.page-tab:hover:not(.active){color:var(--text2)}
+
+/* LEARN PAGE */
+.learn-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:2rem}
+.learn-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem}
+.learn-card h3{font-size:1rem;font-weight:700;margin-bottom:.75rem}
+.learn-card p{font-size:.85rem;color:var(--text2);line-height:1.7}
+.formula-box{background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:1rem 1.5rem;font-family:'JetBrains Mono',monospace;font-size:.9rem;color:var(--accent);margin:1rem 0;text-align:center;letter-spacing:.05em}
+.freq-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.freq-table th{padding:10px 16px;text-align:left;font-size:.7rem;letter-spacing:.06em;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace}
+.freq-table td{padding:12px 16px;border-bottom:1px solid rgba(30,45,69,0.4);font-family:'JetBrains Mono',monospace;font-size:.8rem}
+.freq-table tr:last-child td{border-bottom:none}
+.flow-steps{display:flex;gap:0;overflow-x:auto;padding-bottom:.5rem}
+.flow-step{flex:1;min-width:130px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center;position:relative}
+.flow-step:not(:last-child)::after{content:'→';position:absolute;right:-16px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:1.1rem;z-index:1}
+.flow-num{width:28px;height:28px;border-radius:50%;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:var(--accent);font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto .5rem;font-family:'JetBrains Mono',monospace}
+.flow-label{font-size:.72rem;font-weight:600;color:var(--text2)}
+
+/* ABOUT */
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:2rem}
+.about-block{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem}
+.about-block h3{font-size:.95rem;font-weight:700;margin-bottom:1rem;color:var(--text)}
+.about-list{list-style:none}
+.about-list li{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(30,45,69,0.4);font-size:.83rem;color:var(--text2);line-height:1.5}
+.about-list li:last-child{border-bottom:none}
+.about-list li::before{content:'◈';color:var(--accent);font-size:.6rem;margin-top:4px;flex-shrink:0}
+
+/* TOAST */
+.toast{position:fixed;bottom:2rem;right:2rem;background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:1rem 1.5rem;font-size:.85rem;z-index:999;transform:translateY(100px);transition:transform .3s;display:flex;align-items:center;gap:10px}
+.toast.show{transform:translateY(0)}
+.toast-dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.fade-up{animation:fadeUp .4s ease both}
+.delay-1{animation-delay:.1s}
+.delay-2{animation-delay:.2s}
+.delay-3{animation-delay:.3s}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  .metrics-grid{grid-template-columns:repeat(2,1fr)}
+  .charts-grid{grid-template-columns:1fr}
+  .algo-grid{grid-template-columns:1fr}
+  .proc-table-header,.proc-row{grid-template-columns:40px 1fr 90px 90px 90px;font-size:.72rem}
+  .proc-row > *:nth-child(6){display:none}
+  .rt-header,.rt-row{grid-template-columns:50px 1fr 90px 90px 90px}
+  .rt-row > *:nth-child(5),.rt-row > *:nth-child(6){display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Energy<span>OS</span></div>
+  <div class="nav-links">
+    <a onclick="showPage('simulator')" id="nav-simulator" class="active">Simulator</a>
+    <a onclick="showPage('learn')" id="nav-learn">How It Works</a>
+    <a onclick="showPage('about')" id="nav-about">About</a>
+  </div>
+  <div class="nav-badge">v1.0 · EDF+DVFS</div>
+</nav>
+
+<!-- HERO -->
+<div class="hero" id="hero-section">
+  <div class="hero-tag">⚡ OS Project — Energy-Efficient CPU Scheduling</div>
+  <h1>Schedule Smarter.<br><span class="line2">Save More Energy.</span></h1>
+  <p>An interactive simulation of EDF + DVFS scheduling algorithm that minimizes CPU energy consumption without compromising performance — built for mobile and embedded systems.</p>
+  <div class="hero-btns">
+    <button class="btn btn-primary" onclick="showPage('simulator');scrollTo(0,400)">Launch Simulator</button>
+    <button class="btn btn-outline" onclick="showPage('learn')">Learn the Concepts</button>
+  </div>
+</div>
+
+<!-- STATS STRIP -->
+<div class="stats-strip">
+  <div class="stat-item"><div class="stat-num">39%</div><div class="stat-label">AVG ENERGY SAVED VS ROUND ROBIN</div></div>
+  <div class="stat-item"><div class="stat-num">3</div><div class="stat-label">CPU FREQUENCY LEVELS (DVFS)</div></div>
+  <div class="stat-item"><div class="stat-num">4</div><div class="stat-label">PROCESS TYPES SUPPORTED</div></div>
+  <div class="stat-item"><div class="stat-num">6</div><div class="stat-label">LIVE GRAPHS GENERATED</div></div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+  <div class="page-tabs">
+    <div class="page-tab active" onclick="showPage('simulator')" id="tab-simulator">Simulator</div>
+    <div class="page-tab" onclick="showPage('learn')" id="tab-learn">How It Works</div>
+    <div class="page-tab" onclick="showPage('about')" id="tab-about">About</div>
+  </div>
+
+  <!-- ═══════════════ SIMULATOR PAGE ═══════════════ -->
+  <div id="page-simulator">
+
+    <!-- SETUP ROW -->
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:16px;margin-bottom:2rem">
+
+      <!-- PROCESSES CARD -->
+      <div class="card fade-up">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(0,212,255,0.1)">⚙️</div>
+          <div>
+            <div class="card-title">Process Queue</div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-outline" style="padding:7px 14px;font-size:.8rem" onclick="addProcess()">+ Add</button>
+            <button class="btn btn-outline" style="padding:7px 14px;font-size:.8rem;color:var(--red);border-color:rgba(255,71,87,0.3)" onclick="clearProcesses()">Clear</button>
+          </div>
+        </div>
+        <div style="padding:.75rem 1rem .25rem">
+          <div class="preset-chips">
+            <div class="chip" onclick="loadPreset('mobile')">📱 Mobile Workload</div>
+            <div class="chip" onclick="loadPreset('iot')">🔌 IoT System</div>
+            <div class="chip" onclick="loadPreset('mixed')">⚡ Mixed Load</div>
+            <div class="chip" onclick="loadPreset('stress')">🔥 Stress Test</div>
+          </div>
+        </div>
+        <div class="proc-table-header">
+          <span>PID</span><span>TYPE</span><span>BURST (ms)</span><span>DEADLINE (ms)</span><span>ARRIVAL (ms)</span><span>PRIORITY</span><span></span>
+        </div>
+        <div id="process-list"></div>
+      </div>
+
+      <!-- RIGHT SIDEBAR -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <!-- Algo Picker -->
+        <div class="card fade-up delay-1">
+          <div class="card-header">
+            <div class="card-icon" style="background:rgba(0,255,136,0.1)">🧠</div>
+            <div class="card-title">Algorithm</div>
+          </div>
+          <div class="card-body" style="padding:1rem">
+            <div class="algo-grid" style="grid-template-columns:1fr">
+              <div class="algo-card selected" onclick="selectAlgo('edf')" id="algo-edf">
+                <div class="algo-badge energy">ENERGY-EFFICIENT</div>
+                <div class="algo-name">EDF + DVFS</div>
+                <div class="algo-desc">Earliest Deadline First with Dynamic Voltage & Frequency Scaling. Adjusts CPU speed per process type.</div>
+              </div>
+              <div class="algo-card" onclick="selectAlgo('rr')" id="algo-rr">
+                <div class="algo-badge trad">TRADITIONAL</div>
+                <div class="algo-name">Round Robin</div>
+                <div class="algo-desc">Fixed time quantum. Always runs at max frequency. No energy awareness.</div>
+              </div>
+              <div class="algo-card" onclick="selectAlgo('priority')" id="algo-priority">
+                <div class="algo-badge trad">TRADITIONAL</div>
+                <div class="algo-name">Priority Scheduling</div>
+                <div class="algo-desc">Ordered by priority. Always max frequency. No DVFS or sleep states.</div>
+              </div>
+            </div>
+            <button class="run-btn" id="run-btn" onclick="runSimulation()">▶ Run Simulation</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS (hidden initially) -->
+    <div id="results-section" style="display:none">
+      <div class="section-header">
+        <div class="section-title">📊 Simulation Results</div>
+        <div class="section-tag" id="algo-used-tag">EDF + DVFS</div>
+      </div>
+
+      <!-- METRICS -->
+      <div class="metrics-grid" id="metrics-grid"></div>
+
+      <!-- GANTT -->
+      <div class="gantt-wrap fade-up">
+        <div class="chart-header">
+          <div class="chart-title">Gantt Chart — CPU Execution Timeline</div>
+          <div class="gantt-legend" id="gantt-legend" style="margin:0"></div>
+        </div>
+        <div class="gantt-inner">
+          <div class="gantt-track" id="gantt-track"></div>
+          <div class="gantt-axis" id="gantt-axis"></div>
+        </div>
+      </div>
+
+      <!-- CHARTS GRID -->
+      <div class="charts-grid">
+        <div class="chart-card fade-up">
+          <div class="chart-header"><div class="chart-title">Energy Comparison — All Algorithms</div></div>
+          <div class="chart-body"><div style="position:relative;height:230px"><canvas id="energyChart"></canvas></div></div>
+        </div>
+        <div class="chart-card fade-up delay-1">
+          <div class="chart-header"><div class="chart-title">CPU Frequency Over Time (DVFS)</div></div>
+          <div class="chart-body"><div style="position:relative;height:230px"><canvas id="freqChart"></canvas></div></div>
+        </div>
+        <div class="chart-card fade-up delay-2">
+          <div class="chart-header"><div class="chart-title">Turnaround & Waiting Time per Process</div></div>
+          <div class="chart-body"><div style="position:relative;height:230px"><canvas id="tatChart"></canvas></div></div>
+        </div>
+        <div class="chart-card fade-up delay-3">
+          <div class="chart-header"><div class="chart-title">Energy Distribution per Process</div></div>
+          <div class="chart-body"><div style="position:relative;height:230px"><canvas id="pieChart"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- WIDE CHART -->
+      <div class="chart-card fade-up" style="margin-bottom:2rem">
+        <div class="chart-header"><div class="chart-title">Energy Savings — Your Algorithm vs Traditional Schedulers</div></div>
+        <div class="chart-body"><div style="position:relative;height:200px"><canvas id="savingsChart"></canvas></div></div>
+      </div>
+
+      <!-- RESULTS TABLE -->
+      <div class="card fade-up">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(168,85,247,0.1)">📋</div>
+          <div class="card-title">Detailed Process Execution Log</div>
+        </div>
+        <div class="rt-header">
+          <span>PID</span><span>TYPE</span><span>FREQ (MHz)</span><span>EXEC (ms)</span><span>ENERGY (J)</span><span>TURNAROUND</span><span>DEADLINE</span>
+        </div>
+        <div id="results-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ LEARN PAGE ═══════════════ -->
+  <div id="page-learn" style="display:none">
+    <div class="learn-grid">
+      <div class="learn-card">
+        <h3>⚡ What is DVFS?</h3>
+        <p>Dynamic Voltage and Frequency Scaling lets the CPU operate at different power levels. By reducing frequency, voltage also drops, cutting power consumption dramatically.</p>
+        <div class="formula-box">P = C × V² × f</div>
+        <p>Lowering frequency from 2400 MHz to 600 MHz reduces power by ~87%. The scheduler picks the minimum frequency needed to meet each process's deadline.</p>
+      </div>
+      <div class="learn-card">
+        <h3>📅 What is EDF?</h3>
+        <p>Earliest Deadline First is a scheduling policy where the process with the nearest deadline always runs first. It is provably optimal for real-time systems — if a feasible schedule exists, EDF will find it.</p>
+        <p style="margin-top:.75rem">Combined with DVFS, EDF assigns each process just enough CPU frequency to meet its deadline — no more, no less.</p>
+      </div>
+      <div class="learn-card">
+        <h3>😴 CPU Sleep States (C-States)</h3>
+        <p>When the CPU is idle between processes, it enters power-saving sleep states. Deeper sleep = more energy saved, but slightly longer wake-up time.</p>
+        <div style="margin-top:.75rem">
+          <table class="freq-table">
+            <tr><th>State</th><th>Power</th><th>Wake Time</th><th>Savings</th></tr>
+            <tr><td>C1 Halt</td><td style="color:var(--orange)">0.5 W</td><td>~1 µs</td><td>30%</td></tr>
+            <tr><td>C2 Stop</td><td style="color:var(--orange)">0.2 W</td><td>~10 µs</td><td>50%</td></tr>
+            <tr><td>C6 Deep</td><td style="color:var(--green)">0.05 W</td><td>~200 µs</td><td>90%</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="learn-card">
+        <h3>🔀 Process Types & Frequency</h3>
+        <table class="freq-table">
+          <tr><th>Type</th><th>Frequency</th><th>Power</th><th>Example</th></tr>
+          <tr><td><span class="type-badge badge-rt">realtime</span></td><td style="color:var(--rt)">2400 MHz</td><td>4.0 W</td><td>Audio, sensors</td></tr>
+          <tr><td><span class="type-badge badge-cpu">cpu bound</span></td><td style="color:var(--cpu)">1200 MHz</td><td>1.5 W</td><td>Encoding, ML</td></tr>
+          <tr><td><span class="type-badge badge-io">io bound</span></td><td style="color:var(--io)">600 MHz</td><td>0.5 W</td><td>File I/O, DB</td></tr>
+          <tr><td><span class="type-badge badge-bg">background</span></td><td style="color:var(--purple)">600 MHz</td><td>0.5 W</td><td>Sync, cache</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:2rem">
+      <div class="card-header"><div class="card-title">🔄 How the Algorithm Works — Step by Step</div></div>
+      <div class="card-body">
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-label">Processes arrive & are classified by type</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-label">EDF sorts by nearest deadline</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-label">DVFS assigns minimum required frequency</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-label">CPU executes at assigned frequency</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">5</div>
+            <div class="flow-label">Idle gaps → deep C-State sleep</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">6</div>
+            <div class="flow-label">Energy & deadlines are logged</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:2rem">
+      <div class="card-header"><div class="card-title">📐 Key Formulas Used</div></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:.7rem;color:var(--text3);margin-bottom:.5rem;font-family:'JetBrains Mono',monospace">POWER FORMULA</div>
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:.95rem">P = C × V² × f</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:.7rem;color:var(--text3);margin-bottom:.5rem;font-family:'JetBrains Mono',monospace">ENERGY FORMULA</div>
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--green);font-size:.95rem">E = P × t (Joules)</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center">
+            <div style="font-size:.7rem;color:var(--text3);margin-bottom:.5rem;font-family:'JetBrains Mono',monospace">BURST PREDICTION</div>
+            <div style="font-family:'JetBrains Mono',monospace;color:var(--purple);font-size:.95rem">P = α·t + (1-α)·P₀</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ ABOUT PAGE ═══════════════ -->
+  <div id="page-about" style="display:none">
+    <div class="about-grid">
+      <div class="about-block">
+        <h3>🎯 Project Objective</h3>
+        <ul class="about-list">
+          <li>Develop a CPU scheduling algorithm that minimizes energy consumption</li>
+          <li>Maintain performance and deadline guarantees for real-time tasks</li>
+          <li>Target mobile and embedded systems with limited battery life</li>
+          <li>Combine EDF scheduling with DVFS for optimal power management</li>
+          <li>Implement CPU sleep state (C-State) management during idle periods</li>
+        </ul>
+      </div>
+      <div class="about-block">
+        <h3>🛠 Technologies Used</h3>
+        <ul class="about-list">
+          <li>Python — Core simulation engine (process.py, scheduler.py, dvfs.py)</li>
+          <li>HTML / CSS / JavaScript — Interactive web dashboard</li>
+          <li>Chart.js — All 6 live graphs and visualizations</li>
+          <li>Matplotlib + NumPy — Python-side graph generation</li>
+          <li>EDF Algorithm — Real-time optimal scheduling policy</li>
+          <li>DVFS — Dynamic Voltage and Frequency Scaling model</li>
+        </ul>
+      </div>
+      <div class="about-block">
+        <h3>📁 Project File Structure</h3>
+        <ul class="about-list">
+          <li><span style="color:var(--accent);font-family:monospace">index.html</span> — This interactive web dashboard</li>
+          <li><span style="color:var(--accent);font-family:monospace">main.py</span> — Entry point, runs Python simulation</li>
+          <li><span style="color:var(--accent);font-family:monospace">scheduler.py</span> — Core EDF + DVFS algorithm</li>
+          <li><span style="color:var(--accent);font-family:monospace">process.py</span> — Process data model</li>
+          <li><span style="color:var(--accent);font-family:monospace">dvfs.py</span> — Frequency & voltage controller</li>
+          <li><span style="color:var(--accent);font-family:monospace">energy_monitor.py</span> — Comparison with traditional schedulers</li>
+          <li><span style="color:var(--accent);font-family:monospace">visualizer.py</span> — Python graph generation</li>
+          <li><span style="color:var(--accent);font-family:monospace">predictor.py</span> — Burst time EMA predictor</li>
+        </ul>
+      </div>
+      <div class="about-block">
+        <h3>📊 Real-World Applications</h3>
+        <ul class="about-list">
+          <li>Android OS uses Energy Aware Scheduling (EAS) in Linux kernel</li>
+          <li>Apple Silicon uses efficiency + performance cores (same concept)</li>
+          <li>ARM big.LITTLE architecture assigns tasks by energy need</li>
+          <li>IoT devices (ESP32, STM32) run months on a single battery</li>
+          <li>Medical wearables: pacemakers, glucose monitors</li>
+          <li>Autonomous vehicles — real-time + energy critical</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:2rem">
+      <div class="card-header"><div class="card-title">📈 Performance Metrics Explained</div></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem">
+            <div style="font-size:.75rem;font-weight:700;color:var(--accent);margin-bottom:.5rem">Energy (Joules)</div>
+            <div style="font-size:.8rem;color:var(--text2);line-height:1.6">Primary metric. Total electrical energy consumed during all process execution and idle periods.</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem">
+            <div style="font-size:.75rem;font-weight:700;color:var(--green);margin-bottom:.5rem">Turnaround Time</div>
+            <div style="font-size:.8rem;color:var(--text2);line-height:1.6">Time from process arrival to completion. Measures overall system responsiveness and performance.</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem">
+            <div style="font-size:.75rem;font-weight:700;color:var(--purple);margin-bottom:.5rem">Deadline Miss Rate</div>
+            <div style="font-size:.8rem;color:var(--text2);line-height:1.6">Percentage of real-time tasks that exceeded their deadline. Lower is better — 0% is ideal for critical systems.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="toast-dot"></div>
+  <span id="toast-msg">Simulation complete!</span>
+</div>
+
+<script>
+// ═══════════ DATA ═══════════
+const FREQ_MAP = {
+  realtime:   {freq:2400,power:4.0,label:'High'},
+  cpu_bound:  {freq:1200,power:1.5,label:'Medium'},
+  io_bound:   {freq:600, power:0.5,label:'Low'},
+  background: {freq:600, power:0.5,label:'Low'},
+};
+const TYPE_COLORS = {
+  realtime:   {bg:'rgba(255,71,87,0.7)',  border:'#ff4757',text:'#fff'},
+  cpu_bound:  {bg:'rgba(0,180,220,0.75)', border:'#00d4ff',text:'#fff'},
+  io_bound:   {bg:'rgba(0,200,100,0.7)',  border:'#00ff88',text:'#fff'},
+  background: {bg:'rgba(140,80,210,0.65)',border:'#a855f7',text:'#fff'},
+  idle:       {bg:'rgba(42,58,82,0.8)',   border:'#3a5070',text:'#8ba3c7'},
+};
+const PRESETS = {
+  mobile:[
+    {type:'realtime',burst:80,deadline:300,arrival:0,priority:1},
+    {type:'cpu_bound',burst:250,deadline:1000,arrival:50,priority:2},
+    {type:'io_bound',burst:120,deadline:700,arrival:100,priority:2},
+    {type:'background',burst:200,deadline:2000,arrival:150,priority:3},
+    {type:'realtime',burst:60,deadline:400,arrival:200,priority:1},
+  ],
+  iot:[
+    {type:'realtime',burst:40,deadline:200,arrival:0,priority:1},
+    {type:'realtime',burst:50,deadline:250,arrival:30,priority:1},
+    {type:'io_bound',burst:100,deadline:600,arrival:60,priority:2},
+    {type:'background',burst:150,deadline:1500,arrival:100,priority:3},
+    {type:'io_bound',burst:80,deadline:800,arrival:150,priority:2},
+  ],
+  mixed:[
+    {type:'realtime',burst:100,deadline:400,arrival:0,priority:1},
+    {type:'cpu_bound',burst:300,deadline:1200,arrival:50,priority:2},
+    {type:'io_bound',burst:150,deadline:900,arrival:100,priority:2},
+    {type:'background',burst:200,deadline:2000,arrival:150,priority:3},
+    {type:'cpu_bound',burst:250,deadline:1500,arrival:300,priority:2},
+    {type:'io_bound',burst:120,deadline:1800,arrival:400,priority:2},
+    {type:'background',burst:180,deadline:2500,arrival:500,priority:3},
+  ],
+  stress:[
+    {type:'realtime',burst:50,deadline:200,arrival:0,priority:1},
+    {type:'realtime',burst:80,deadline:300,arrival:20,priority:1},
+    {type:'cpu_bound',burst:400,deadline:1500,arrival:40,priority:2},
+    {type:'cpu_bound',burst:350,deadline:1800,arrival:80,priority:2},
+    {type:'io_bound',burst:200,deadline:1200,arrival:100,priority:2},
+    {type:'io_bound',burst:150,deadline:1000,arrival:150,priority:2},
+    {type:'background',burst:300,deadline:3000,arrival:200,priority:3},
+    {type:'background',burst:250,deadline:3500,arrival:250,priority:3},
+  ]
+};
+
+let processes = [], pidCounter = 1, selectedAlgo = 'edf', charts = {};
+
+// ═══════════ PAGES ═══════════
+function showPage(page) {
+  ['simulator','learn','about'].forEach(p => {
+    document.getElementById('page-'+p).style.display = p===page?'block':'none';
+    document.getElementById('tab-'+p).classList.toggle('active',p===page);
+    const nav = document.getElementById('nav-'+p);
+    if(nav) nav.classList.toggle('active',p===page);
+  });
+  document.getElementById('hero-section').style.display = page==='simulator'?'block':'none';
+  document.querySelector('.stats-strip').style.display = page==='simulator'?'grid':'none';
+}
+
+// ═══════════ ALGO ═══════════
+function selectAlgo(algo) {
+  selectedAlgo = algo;
+  ['edf','rr','priority'].forEach(a => {
+    document.getElementById('algo-'+a).classList.toggle('selected',a===algo);
+  });
+}
+
+// ═══════════ PROCESSES ═══════════
+function addProcess(data) {
+  const p = data || {type:'cpu_bound',burst:200,deadline:1000,arrival:0,priority:2};
+  processes.push({pid:pidCounter++,...p});
+  renderProcessList();
+}
+function clearProcesses() {
+  processes = []; pidCounter = 1; renderProcessList();
+}
+function removeProcess(pid) {
+  processes = processes.filter(p=>p.pid!==pid);
+  renderProcessList();
+}
+function updateProcess(pid,field,value) {
+  const p = processes.find(p=>p.pid===pid);
+  if(p) p[field] = field==='type'?value:Math.max(0,parseInt(value)||0);
+}
+function loadPreset(name) {
+  processes = []; pidCounter = 1;
+  (PRESETS[name]||[]).forEach(p => addProcess(p));
+}
+
+function typeBadgeHTML(type) {
+  const cls = {realtime:'rt',cpu_bound:'cpu',io_bound:'io',background:'bg'}[type]||'cpu';
+  return `<span class="type-badge badge-${cls}">${type.replace('_',' ')}</span>`;
+}
+
+function renderProcessList() {
+  const list = document.getElementById('process-list');
+  if(!processes.length) {
+    list.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--text3);font-size:.85rem">No processes yet — load a preset or click + Add</div>`;
+    return;
+  }
+  list.innerHTML = processes.map(p=>`
+    <div class="proc-row">
+      <div class="pid-badge">P${p.pid}</div>
+      <select class="type-select" onchange="updateProcess(${p.pid},'type',this.value)">
+        ${['realtime','cpu_bound','io_bound','background'].map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${t.replace('_',' ')}</option>`).join('')}
+      </select>
+      <input class="num-input" type="number" value="${p.burst}" min="10" max="2000" onchange="updateProcess(${p.pid},'burst',this.value)" />
+      <input class="num-input" type="number" value="${p.deadline}" min="50" max="10000" onchange="updateProcess(${p.pid},'deadline',this.value)" />
+      <input class="num-input" type="number" value="${p.arrival}" min="0" max="5000" onchange="updateProcess(${p.pid},'arrival',this.value)" />
+      <input class="num-input" type="number" value="${p.priority||2}" min="1" max="3" onchange="updateProcess(${p.pid},'priority',this.value)" />
+      <button class="del-btn" onclick="removeProcess(${p.pid})">✕</button>
+    </div>
+  `).join('');
+}
+
+// ═══════════ SIMULATION ═══════════
+function simulate(procs, algo) {
+  let sorted = procs.map(p=>({...p}));
+  if(algo==='edf') sorted.sort((a,b)=>a.deadline-b.deadline);
+  else if(algo==='priority') sorted.sort((a,b)=>(a.priority||2)-(b.priority||2));
+  else sorted.sort((a,b)=>a.arrival-b.arrival);
+
+  let t=0, totalEnergy=0, idleEnergy=0, timeline=[];
+  sorted.forEach(p=>{
+    if(p.arrival>t){
+      const idle=p.arrival-t;
+      const sp=idle>50?0.05:idle>10?0.2:0.5;
+      const ie=sp*(idle/1000);
+      idleEnergy+=ie; totalEnergy+=ie;
+      timeline.push({label:'IDLE',start:t,end:p.arrival,type:'idle'});
+      t=p.arrival;
+    }
+    const finfo=algo==='edf'||algo==='priority'?FREQ_MAP[p.type]:{freq:2400,power:4.0};
+    const exec=p.burst*(2400/finfo.freq);
+    const energy=finfo.power*(exec/1000);
+    p.freqUsed=finfo.freq; p.execTime=exec; p.energyUsed=energy;
+    p.startTime=t; p.completionTime=t+exec;
+    p.turnaround=p.completionTime-p.arrival;
+    p.waiting=Math.max(0,t-p.arrival);
+    p.deadlineMet=p.completionTime<=p.deadline;
+    totalEnergy+=energy;
+    timeline.push({label:'P'+p.pid,start:t,end:p.completionTime,type:p.type,freq:finfo.freq,pid:p.pid});
+    t=p.completionTime;
+  });
+  return{sorted,timeline,totalEnergy,idleEnergy};
+}
+
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+function runSimulation(){
+  if(!processes.length){showToast('Add at least one process first!');return;}
+  const btn=document.getElementById('run-btn');
+  btn.textContent='Running...'; btn.classList.add('running');
+
+  setTimeout(()=>{
+    const{sorted,timeline,totalEnergy,idleEnergy}=simulate(processes,selectedAlgo);
+    const rrEnergy=processes.reduce((s,p)=>s+4.0*(p.burst*1.1/1000),0);
+    const psEnergy=processes.reduce((s,p)=>s+4.0*(p.burst/1000),0);
+    const fcfsEnergy=psEnergy;
+    const savings=Math.max(0,((rrEnergy-totalEnergy)/rrEnergy*100));
+    const met=sorted.filter(p=>p.deadlineMet).length;
+    const avgTAT=sorted.reduce((s,p)=>s+p.turnaround,0)/sorted.length;
+    const n=sorted.length;
+
+    // Metrics
+    document.getElementById('metrics-grid').innerHTML=`
+      <div class="metric-card accent fade-up">
+        <div class="metric-label">TOTAL ENERGY</div>
+        <div class="metric-value" style="color:var(--accent)">${totalEnergy.toFixed(3)}</div>
+        <div class="metric-unit">Joules consumed</div>
+      </div>
+      <div class="metric-card green fade-up delay-1">
+        <div class="metric-label">ENERGY SAVED VS RR</div>
+        <div class="metric-value" style="color:var(--green)">${savings.toFixed(1)}%</div>
+        <div class="metric-unit">over Round Robin</div>
+      </div>
+      <div class="metric-card ${met===n?'green':'red'} fade-up delay-2">
+        <div class="metric-label">DEADLINES MET</div>
+        <div class="metric-value" style="color:${met===n?'var(--green)':'var(--red)'}">${met}/${n}</div>
+        <div class="metric-unit">${met===n?'All on time':'Some missed'}</div>
+      </div>
+      <div class="metric-card purple fade-up delay-3">
+        <div class="metric-label">AVG TURNAROUND</div>
+        <div class="metric-value" style="color:var(--purple)">${Math.round(avgTAT)}</div>
+        <div class="metric-unit">milliseconds</div>
+      </div>
+      <div class="metric-card orange fade-up">
+        <div class="metric-label">IDLE ENERGY</div>
+        <div class="metric-value" style="color:var(--orange)">${idleEnergy.toFixed(4)}</div>
+        <div class="metric-unit">Joules (sleep states)</div>
+      </div>
+    `;
+
+    // GANTT
+    const totalTime=Math.max(...timeline.map(b=>b.end));
+    const track=document.getElementById('gantt-track');
+    track.innerHTML='';
+    timeline.forEach(block=>{
+      const pct=(block.end-block.start)/totalTime*100;
+      const left=block.start/totalTime*100;
+      if(pct<0.1)return;
+      const c=TYPE_COLORS[block.type]||TYPE_COLORS.idle;
+      const div=document.createElement('div');
+      div.className='gantt-block';
+      div.style.cssText=`left:${left.toFixed(2)}%;width:${pct.toFixed(2)}%;background:${c.bg};border-color:${c.border};color:${c.text}`;
+      div.innerHTML=`${block.label}${block.freq?'<br>'+block.freq+'M':''}`;
+      div.title=`${block.label}: ${Math.round(block.start)}ms → ${Math.round(block.end)}ms`;
+      track.appendChild(div);
+    });
+    const axis=document.getElementById('gantt-axis');
+    axis.innerHTML='';
+    for(let i=0;i<=6;i++){
+      const s=document.createElement('span');
+      s.textContent=Math.round(totalTime*i/6)+'ms';
+      axis.appendChild(s);
+    }
+    // Gantt Legend
+    document.getElementById('gantt-legend').innerHTML=Object.entries(TYPE_COLORS).map(([k,c])=>
+      `<div class="legend-item"><div class="legend-dot" style="background:${c.bg};border:1px solid ${c.border}"></div>${k.replace('_',' ')}</div>`
+    ).join('');
+
+    // Energy Comparison
+    destroyChart('energyChart');
+    charts['energyChart']=new Chart(document.getElementById('energyChart'),{
+      type:'bar',
+      data:{labels:['EDF+DVFS\n(Yours)','Round\nRobin','Priority\nSched.','FCFS'],
+        datasets:[{data:[+totalEnergy.toFixed(4),+rrEnergy.toFixed(4),+psEnergy.toFixed(4),+fcfsEnergy.toFixed(4)],
+          backgroundColor:['rgba(0,255,136,0.7)','rgba(255,71,87,0.6)','rgba(255,165,2,0.6)','rgba(255,100,80,0.6)'],
+          borderColor:['#00ff88','#ff4757','#ffa502','#ff6450'],borderWidth:1,borderRadius:6}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>`${c.raw.toFixed(4)} J`}}},
+        scales:{y:{title:{display:true,text:'Joules',color:'#8ba3c7'},ticks:{color:'#8ba3c7'},grid:{color:'rgba(255,255,255,0.04)'}},
+          x:{ticks:{color:'#8ba3c7'},grid:{display:false}}}}
+    });
+
+    // Freq Timeline
+    destroyChart('freqChart');
+    const fLabels=[],fData=[];
+    timeline.forEach(b=>{
+      fLabels.push(Math.round(b.start)+'ms');fData.push(b.type==='idle'?0:(b.freq||0));
+      fLabels.push(Math.round(b.end)+'ms');fData.push(b.type==='idle'?0:(b.freq||0));
+    });
+    charts['freqChart']=new Chart(document.getElementById('freqChart'),{
+      type:'line',
+      data:{labels:fLabels,datasets:[{data:fData,borderColor:'#00d4ff',backgroundColor:'rgba(0,212,255,0.1)',fill:true,stepped:true,pointRadius:0,borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{y:{min:0,max:2800,ticks:{color:'#8ba3c7',callback:v=>v?v+'MHz':'Sleep'},grid:{color:'rgba(255,255,255,0.04)'}},
+          x:{ticks:{maxTicksLimit:6,maxRotation:0,color:'#8ba3c7'},grid:{display:false}}}}
+    });
+
+    // TAT Chart
+    destroyChart('tatChart');
+    charts['tatChart']=new Chart(document.getElementById('tatChart'),{
+      type:'bar',
+      data:{labels:sorted.map(p=>'P'+p.pid),
+        datasets:[
+          {label:'Exec Time',data:sorted.map(p=>Math.round(p.execTime)),backgroundColor:'rgba(0,180,220,0.6)',borderColor:'#00d4ff',borderWidth:1,borderRadius:4},
+          {label:'Waiting',data:sorted.map(p=>Math.round(p.waiting)),backgroundColor:'rgba(255,165,2,0.55)',borderColor:'#ffa502',borderWidth:1,borderRadius:4}
+        ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:true,labels:{color:'#8ba3c7',boxWidth:10,font:{size:11}}}},
+        scales:{x:{ticks:{color:'#8ba3c7'},grid:{display:false}},
+          y:{title:{display:true,text:'ms',color:'#8ba3c7'},ticks:{color:'#8ba3c7'},grid:{color:'rgba(255,255,255,0.04)'}}}}
+    });
+
+    // Pie
+    destroyChart('pieChart');
+    charts['pieChart']=new Chart(document.getElementById('pieChart'),{
+      type:'doughnut',
+      data:{labels:sorted.map(p=>`P${p.pid} (${p.type.replace('_',' ')})`),
+        datasets:[{data:sorted.map(p=>+p.energyUsed.toFixed(4)),
+          backgroundColor:sorted.map(p=>TYPE_COLORS[p.type]?.bg||'#444'),
+          borderColor:sorted.map(p=>TYPE_COLORS[p.type]?.border||'#666'),borderWidth:1}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'right',labels:{color:'#8ba3c7',boxWidth:10,font:{size:10},padding:8}}}}
+    });
+
+    // Savings Bar
+    destroyChart('savingsChart');
+    const savRR=Math.max(0,(rrEnergy-totalEnergy)/rrEnergy*100);
+    const savPS=Math.max(0,(psEnergy-totalEnergy)/psEnergy*100);
+    charts['savingsChart']=new Chart(document.getElementById('savingsChart'),{
+      type:'bar',
+      data:{labels:['vs Round Robin','vs Priority Scheduling','vs FCFS'],
+        datasets:[{label:'Energy Saved %',data:[+savRR.toFixed(1),+savPS.toFixed(1),+savPS.toFixed(1)],
+          backgroundColor:['rgba(0,255,136,0.6)','rgba(0,212,255,0.6)','rgba(168,85,247,0.6)'],
+          borderColor:['#00ff88','#00d4ff','#a855f7'],borderWidth:1,borderRadius:6}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}% energy saved`}}},
+        scales:{x:{max:60,title:{display:true,text:'Energy Saved (%)',color:'#8ba3c7'},ticks:{color:'#8ba3c7',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.04)'}},
+          y:{ticks:{color:'#8ba3c7'},grid:{display:false}}}}
+    });
+
+    // Results Table
+    document.getElementById('results-table').innerHTML=sorted.map((p,i)=>`
+      <div class="rt-row" style="animation-delay:${i*0.05}s">
+        <div class="pid-badge">P${p.pid}</div>
+        <div>${typeBadgeHTML(p.type)}</div>
+        <div class="mono" style="color:${p.type==='realtime'?'var(--rt)':p.type==='cpu_bound'?'var(--cpu)':p.type==='io_bound'?'var(--io)':'var(--purple)'}">${p.freqUsed} MHz</div>
+        <div class="mono">${Math.round(p.execTime)} ms</div>
+        <div class="mono">${p.energyUsed.toFixed(4)} J</div>
+        <div class="mono">${Math.round(p.turnaround)} ms</div>
+        <div class="${p.deadlineMet?'deadline-met':'deadline-miss'}">${p.deadlineMet?'✓ MET':'✗ MISSED'}</div>
+      </div>
+    `).join('');
+
+    const algoNames={edf:'EDF + DVFS',rr:'Round Robin',priority:'Priority Scheduling'};
+    document.getElementById('algo-used-tag').textContent=algoNames[selectedAlgo];
+    document.getElementById('results-section').style.display='block';
+    document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'});
+    btn.textContent='▶ Run Simulation'; btn.classList.remove('running');
+    showToast('Simulation complete! '+savings.toFixed(1)+'% energy saved vs Round Robin');
+  },400);
+}
+
+// ═══════════ TOAST ═══════════
+function showToast(msg){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+// ═══════════ INIT ═══════════
+loadPreset('mixed');
+</script>
+</body>
+</html>
