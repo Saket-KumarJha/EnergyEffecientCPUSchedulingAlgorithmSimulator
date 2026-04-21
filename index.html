@@ -676,36 +676,75 @@ function renderProcessList() {
 }
 
 // ═══════════ SIMULATION ═══════════
-function simulate(procs, algo) {
-  let sorted = procs.map(p=>({...p}));
-  if(algo==='edf') sorted.sort((a,b)=>a.deadline-b.deadline);
-  else if(algo==='priority') sorted.sort((a,b)=>(a.priority||2)-(b.priority||2));
-  else sorted.sort((a,b)=>a.arrival-b.arrival);
 
-  let t=0, totalEnergy=0, idleEnergy=0, timeline=[];
-  sorted.forEach(p=>{
-    if(p.arrival>t){
-      const idle=p.arrival-t;
-      const sp=idle>50?0.05:idle>10?0.2:0.5;
-      const ie=sp*(idle/1000);
-      idleEnergy+=ie; totalEnergy+=ie;
-      timeline.push({label:'IDLE',start:t,end:p.arrival,type:'idle'});
-      t=p.arrival;
+function simulate(procs, algo) {
+  let sorted = procs.map(p => ({ ...p }));
+
+  // Sorting logic
+  if (algo === 'edf') sorted.sort((a, b) => a.deadline - b.deadline);
+  else if (algo === 'priority') sorted.sort((a, b) => (a.priority || 2) - (b.priority || 2));
+  else sorted.sort((a, b) => a.arrival - b.arrival);
+
+  let t = 0, totalEnergy = 0, idleEnergy = 0, timeline = [];
+
+  sorted.forEach(p => {
+
+    // Handle idle time
+    if (p.arrival > t) {
+      const idle = p.arrival - t;
+      const sp = idle > 50 ? 0.05 : idle > 10 ? 0.2 : 0.5;
+      const ie = sp * (idle / 1000);
+      idleEnergy += ie;
+      totalEnergy += ie;
+
+      timeline.push({ label: 'IDLE', start: t, end: p.arrival, type: 'idle' });
+      t = p.arrival;
     }
-    const finfo=algo==='edf'||algo==='priority'?FREQ_MAP[p.type]:{freq:2400,power:4.0};
-    const exec=p.burst*(2400/finfo.freq);
-    const energy=finfo.power*(exec/1000);
-    p.freqUsed=finfo.freq; p.execTime=exec; p.energyUsed=energy;
-    p.startTime=t; p.completionTime=t+exec;
-    p.turnaround=p.completionTime-p.arrival;
-    p.waiting=Math.max(0,t-p.arrival);
-    p.deadlineMet=p.completionTime<=p.deadline;
-    totalEnergy+=energy;
-    timeline.push({label:'P'+p.pid,start:t,end:p.completionTime,type:p.type,freq:finfo.freq,pid:p.pid});
-    t=p.completionTime;
+
+    let finfo, exec;
+
+    // ✅ FIXED LOGIC HERE
+    if (algo === 'edf') {
+      // Use DVFS
+      finfo = FREQ_MAP[p.type];
+      exec = p.burst * (2400 / finfo.freq);
+    } else {
+      // Priority & Round Robin → NO DVFS
+      finfo = { freq: 2400, power: 4.0 };
+      exec = p.burst;
+    }
+
+    // Energy calculation
+    const energy = finfo.power * (exec / 1000);
+
+    // Store results
+    p.freqUsed = finfo.freq;
+    p.execTime = exec;
+    p.energyUsed = energy;
+
+    p.startTime = t;
+    p.completionTime = t + exec;
+    p.turnaround = p.completionTime - p.arrival;
+    p.waiting = Math.max(0, t - p.arrival);
+    p.deadlineMet = p.completionTime <= p.deadline;
+
+    totalEnergy += energy;
+
+    timeline.push({
+      label: 'P' + p.pid,
+      start: t,
+      end: p.completionTime,
+      type: p.type,
+      freq: finfo.freq,
+      pid: p.pid
+    });
+
+    t = p.completionTime;
   });
-  return{sorted,timeline,totalEnergy,idleEnergy};
+
+  return { sorted, timeline, totalEnergy, idleEnergy };
 }
+
 
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
@@ -719,7 +758,40 @@ function runSimulation(){
     const rrEnergy=processes.reduce((s,p)=>s+4.0*(p.burst*1.1/1000),0);
     const psEnergy=processes.reduce((s,p)=>s+4.0*(p.burst/1000),0);
     const fcfsEnergy=psEnergy;
-    const savings=Math.max(0,((rrEnergy-totalEnergy)/rrEnergy*100));
+
+
+    let savings = 0;
+    let labelText = "";
+    let toastText = "";
+
+    if (selectedAlgo === 'edf') {
+    const saveRR = ((rrEnergy - totalEnergy) / rrEnergy) * 100;
+    const savePS = ((psEnergy - totalEnergy) / psEnergy) * 100;
+
+    savings = saveRR;
+    labelText = `vs RR (${saveRR.toFixed(1)}%) & Priority (${savePS.toFixed(1)}%)`;
+    toastText = `${saveRR.toFixed(1)}% energy saved vs RR`;
+    }
+
+    else if (selectedAlgo === 'rr') {
+    const worseEDF = ((totalEnergy - rrEnergy) / totalEnergy) * 100;
+    const savePS  = ((psEnergy - rrEnergy) / psEnergy) * 100;
+
+    savings = -worseEDF;
+    labelText = `vs EDF (${worseEDF.toFixed(1)}% worse) & Priority (${savePS.toFixed(1)}%)`;
+    toastText = `Less efficient than EDF by ${worseEDF.toFixed(1)}%`;
+    }
+
+    else if (selectedAlgo === 'priority') {
+    const worseEDF = ((totalEnergy - psEnergy) / totalEnergy) * 100;
+    const saveRR  = ((rrEnergy - psEnergy) / rrEnergy) * 100;
+
+    savings = -worseEDF;
+    labelText = `vs EDF (${worseEDF.toFixed(1)}% worse) & RR (${saveRR.toFixed(1)}%)`;
+    toastText = `Less efficient than EDF by ${worseEDF.toFixed(1)}%`;
+    }
+
+
     const met=sorted.filter(p=>p.deadlineMet).length;
     const avgTAT=sorted.reduce((s,p)=>s+p.turnaround,0)/sorted.length;
     const n=sorted.length;
